@@ -49,7 +49,10 @@ module.exports = function (options) {
 
 			cb(null, file);
 		} catch (e) {
-			cb(new gutil.PluginError('gulp-traceur', String(e), {
+			var error = String(e.map(function(s){
+				return s.replace("compileSource", file.path)
+			}).join("\n"));
+			cb(new gutil.PluginError('gulp-traceur', error, {
 				fileName: file.path,
 				showStack: false
 			}));
