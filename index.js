@@ -19,37 +19,39 @@ module.exports = function (options) {
 			return;
 		}
 
-		var ret;
+		var contents, compiler, generator, parser, ret, source, sourceMapConfig, tree;
 
-		var fileOptions = objectAssign({}, options);
+		var fileOptions = objectAssign({ modules: 'commonjs' }, options);
 		fileOptions.filename = file.relative;
 
-		if (file.sourceMap) {
-			fileOptions.sourceMaps = true;
+		var sourceName = undefined;
+		if (options.moduleName === true) {
+			sourceName = fileOptions.filename;
 		}
 
 		try {
-			ret = traceur.compile(file.contents.toString(), fileOptions);
+			compiler = new traceur.Compiler(fileOptions);
+			contents = file.contents.toString();
+			ret = compiler.compile(contents, sourceName);
+			file.contents = new Buffer(ret);
 
-			if (ret.js) {
-				file.contents = new Buffer(ret.js);
+			if (options.sourceMaps === true) {
+				source = new traceur.syntax.SourceFile(fileOptions.filename, contents);
+				parser = new traceur.syntax.Parser(source);
+				tree = parser.parseModule();
+				tree.moduleName = fileOptions.filename;
+				sourceMapConfig = {file: fileOptions.filename};
+				generator = new traceur.outputgeneration.SourceMapGenerator(sourceMapConfig);
+				sourceMapConfig = {sourceMapGenerator: generator};
+				traceur.outputgeneration.TreeWriter.write(tree, sourceMapConfig, fileOptions.filename);
+				applySourceMap(file, sourceMapConfig.generatedSourceMap);
 			}
 
-			if (ret.generatedSourceMap && file.sourceMap) {
-				applySourceMap(file, ret.generatedSourceMap);
-			}
-
-			if (ret.errors.length > 0) {
-				cb(new gutil.PluginError('gulp-traceur', '\n' + ret.errors.join('\n'), {
-					fileName: file.path,
-					showStack: false
-				}));
-			} else {
-				cb(null, file);
-			}
-		} catch (err) {
-			cb(new gutil.PluginError('gulp-traceur', err, {
-				fileName: file.path
+			cb(null, file);
+		} catch (e) {
+			cb(new gutil.PluginError('gulp-traceur', String(e), {
+				fileName: file.path,
+				showStack: false
 			}));
 		}
 	});
